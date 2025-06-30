@@ -1,30 +1,36 @@
+; hello_console.asm
+; Prints "Hello, world!" to the console using Windows API WriteFile
 
-SECTION .data           ; initialised data section
+extern GetStdHandle
+extern WriteFile
+extern ExitProcess
 
-Msg: db "hello world", 10           ; message to print
-MsgLen: equ $ - Msg                 ; length of message
+global main
 
+section .data
+    msg db "Hello, world!", 13, 10    ; string with CR+LF
+    len equ $ - msg                   ; length of the string
 
-SECTION .text           ; code section
+section .text
+main:
+    ; GetStdHandle(STD_OUTPUT_HANDLE = -11)
+    mov ecx, -11
+    call GetStdHandle                 ; returns HANDLE in rax
 
-global start
-start:
+    ; WriteFile(handle, buffer, length, &written, NULL)
+    mov rcx, rax                     ; HANDLE hFile
+    lea rdx, [rel msg]               ; LPCVOID lpBuffer
+    mov r8d, len                     ; DWORD nNumberOfBytesToWrite
 
-    ; printing message, use write()
-    ; system call 4 syntax: 
-    ; user_ssize_t write(int fd, user_addr_t cbuf, user_size_t nbyte)
-    push dword MsgLen   ; length of message to print
-    push dword Msg      ; message to print
-    push dword 1        ; FD of 1 for standard output
-    sub esp, 4          ; OS/X requires extra 4 bytes after arguments
-    mov eax, 4          ; 4 - write() system call
-    int 80H             ; perform system call
-    add esp, 16         ; restore stack (16 bytes pushed: 3 * dword + 4)
+    sub rsp, 40                     ; shadow space + align stack to 16 bytes
+    lea r9, [rsp+32]                ; LPVOID lpNumberOfBytesWritten (write here)
+    mov qword [rsp+32], 0           ; initialize written bytes to 0
+    mov qword [rsp+40], 0           ; lpOverlapped = NULL
 
-    ; program exit, use sys_exit()
-    push dword 0        ; exit value of 0 returned to the OS
-    sub esp, 4          ; OS/X requires extra 4 bytes after arguments
-    mov eax, 1          ; 1 - sys_exit() system call
-    int 80H             ; perform system call
-    ; no need to restore stack, code after this line will not be executed 
-    ; (program exit)
+    call WriteFile
+
+    add rsp, 40                    ; restore stack
+
+    ; ExitProcess(0)
+    xor ecx, ecx
+    call ExitProcess
